@@ -35,7 +35,7 @@ dependencies:
 
 executables:
   template:
-    source-dirs: app/temp
+    source-dirs: app
     main: Temp.hs
   abc241a:
     source-dirs: problems/otherProblems
