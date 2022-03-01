@@ -1,0 +1,42 @@
+name: comp-programming
+version: 0.1.0.0
+github: "githubuser/comp-programming"
+license: BSD3
+author: "Author name here"
+maintainer: "example@example.com"
+copyright: "2022 Author name here"
+
+extra-source-files:
+  - README.md
+  - ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description: Please see the README on GitHub at <https://github.com/githubuser/comp-programming#readme>
+
+dependencies:
+  - base >= 4.7 && < 5
+  - containers == 0.6.2.1
+  - primitive == 0.7.0.1
+  - vector-algorithms == 0.8.0.3
+  - vector == 0.12.1.2
+  - bytestring == 0.10.10.0
+  - array == 0.5.4.0
+  - heaps == 0.3.6.1
+  - psqueues == 0.2.7.2
+  - deepseq == 1.4.4.0
+  - unboxing-vector == 0.1.1.0
+  - text == 1.2.5.0
+
+executables:
+  template:
+    source-dirs: app/temp
+    main: Temp.hs
+  abc241a:
+    source-dirs: problems/otherProblems
+    main: abc241a.hs

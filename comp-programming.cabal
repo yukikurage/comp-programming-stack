@@ -1,0 +1,66 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           comp-programming
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/comp-programming#readme>
+homepage:       https://github.com/githubuser/comp-programming#readme
+bug-reports:    https://github.com/githubuser/comp-programming/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2022 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/comp-programming
+
+executable abc241a
+  main-is: abc241a.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      app/otherProblems
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable template
+  main-is: Temp.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      app/temp
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
