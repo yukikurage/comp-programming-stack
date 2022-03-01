@@ -55,6 +55,14 @@ import qualified Data.Proxy                    as Proxy
 import qualified Data.Ratio                    as Ratio
 import qualified Data.STRef                    as STRef
 import qualified Data.Sequence                 as Seq
+import           Data.Sequence                  ( (<|)
+                                                , (><)
+                                                , ViewL((:<), EmptyL)
+                                                , ViewR((:>), EmptyR)
+                                                , viewl
+                                                , viewr
+                                                , (|>)
+                                                )
 import qualified Data.Set                      as Set
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as TIO
@@ -83,9 +91,11 @@ yes, no :: T.Text
 yes = "YES"
 no = "NO"
 
+
 main :: IO ()
 main = do
-  return ()
+  pure ()
+
 
 -------------
 -- Library --
@@ -101,6 +111,10 @@ type B = Bool
 type S = String
 
 default (V.Vector, [], T.Text, String, Int, Double)
+
+infixl 1 #
+(#) :: a -> (a -> b) -> b
+(#) a f = f a
 
 ---------
 -- I/O --
@@ -314,7 +328,7 @@ compareSign Negative Positive = LT
 compareSign Negative Negative = EQ
 compareSign _        _        = EQ
 
-data Inf a = Infinity Sign | Finity a deriving Eq
+data Inf a = Infinity Sign | Finity a deriving (Eq, Show)
 
 instance ReadText a => ReadText (Inf a) where
   readText = \case
@@ -461,8 +475,8 @@ mpsqSingleton k p v = MutVar.newMutVar $ PSQueue.singleton k p v
 
 mpsqInsert
   :: Prim.PrimMonad m
-  => Ord p => Int -> p -> v -> MPSQueue (Prim.PrimState m) p v -> m ()
-mpsqInsert k p v = flip MutVar.modifyMutVar' (PSQueue.insert k p v)
+  => Ord p => MPSQueue (Prim.PrimState m) p v -> Int -> p -> v -> m ()
+mpsqInsert m k p v = MutVar.modifyMutVar' m (PSQueue.insert k p v)
 
 -- | 要素は削除せず，優先度が一番小さいものを取り出す
 mpsqFindMin
@@ -481,6 +495,62 @@ mpsqMinView q = do
     Just (k, p, v, q') -> do
       MutVar.writeMutVar q q'
       return $ Just (k, p, v)
+
+
+----------------------
+-- Monadic Sequence --
+----------------------
+
+type MSequence m a = MutVar.MutVar m (Seq.Seq a)
+
+msEmpty :: Prim.PrimMonad m => m (MSequence (Prim.PrimState m) a)
+msEmpty = MutVar.newMutVar Seq.empty
+
+msSingleton :: Prim.PrimMonad m => a -> m (MSequence (Prim.PrimState m) a)
+msSingleton x = MutVar.newMutVar $ Seq.singleton x
+
+infixr 5 <<|
+infixl 5 |>>
+
+-- | Cons
+(<<|) :: Prim.PrimMonad m => a -> MSequence (Prim.PrimState m) a -> m ()
+x <<| xs = MutVar.modifyMutVar' xs (x Seq.<|)
+
+-- | Snoc
+(|>>) :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> a -> m ()
+xs |>> x = MutVar.modifyMutVar' xs (Seq.|> x)
+
+msViewL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msViewL xs = do
+  xs' <- MutVar.readMutVar xs
+  case viewl xs' of
+    EmptyL -> pure Nothing
+    x :< _ -> pure (Just x)
+
+msViewR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msViewR xs = do
+  xs' <- MutVar.readMutVar xs
+  case viewr xs' of
+    EmptyR    -> pure Nothing
+    xs'' :> x -> pure (Just x)
+
+msPopL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msPopL xs = do
+  xs' <- MutVar.readMutVar xs
+  case viewl xs' of
+    EmptyL    -> pure Nothing
+    x :< xs'' -> do
+      MutVar.writeMutVar xs xs''
+      pure (Just x)
+
+msPopR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msPopR xs = do
+  xs' <- MutVar.readMutVar xs
+  case viewr xs' of
+    EmptyR    -> pure Nothing
+    xs'' :> x -> do
+      MutVar.writeMutVar xs xs''
+      pure (Just x)
 
 -----------
 -- Graph --
@@ -521,7 +591,7 @@ dijkstra g i = V.create do
     -- 頂点情報のアップデート処理
       update v alt = do
         VM.write dists v alt
-        mpsqInsert v alt () queue
+        mpsqInsert queue v alt ()
 
       -- 確定した頂点を取り出したときの処理
       processing u = do
@@ -553,10 +623,6 @@ dfs g i = ST.runST do
         return $ Tree.Node now children
   loop i
 
--- bfs :: Graph a -> Int -> Tree.Tree Int
--- bfs g i = ST.runST do
---   bfs
-
 ----------
 -- Maze --
 ----------
@@ -583,6 +649,9 @@ readMaze str = A.listArray ((0, 0), (h - 1, w - 1))
 getMaze :: Int -> IO Maze
 getMaze h = readMaze <$> getLines h
 
+mazeToGraphPos :: Maze -> (Int, Int) -> Int
+mazeToGraphPos mz (i, j) = i * mzWidth mz + j
+
 mazeToGraph :: Rules a -> Maze -> Graph a
 mazeToGraph rules maze =
   gFromEdges (h * w)
@@ -598,11 +667,22 @@ mazeToGraph rules maze =
       , j' < w
       , let c    = maze A.! (i, j)
       , let c'   = maze A.! (i', j')
-      , let edge = (h * i + j, h * i' + j', ) <$> rules c c'
+      , let edge = (w * i + j, w * i' + j', ) <$> rules c c'
       ]
  where
   h = mzHeight maze
   w = mzWidth maze
+
+----------
+-- Tree --
+----------
+
+depth :: Eq a => Tree.Tree a -> a -> Maybe Int
+depth (Tree.Node a []) b | a == b = Just 0
+depth (Tree.Node _ []) _          = Nothing
+depth (Tree.Node a xs) b          = case Maybe.mapMaybe (`depth` b) xs of
+  [] -> Nothing
+  xs -> Just $ 1 + minimum xs
 
 ------------
 -- Others --

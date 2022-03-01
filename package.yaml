@@ -40,3 +40,6 @@ executables:
   abc241a:
     source-dirs: problems/otherProblems
     main: abc241a.hs
+  atc002a:
+    source-dirs: problems/otherProblems
+    main: atc002a.hs
