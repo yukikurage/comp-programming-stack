@@ -91,7 +91,6 @@ yes, no :: T.Text
 yes = "YES"
 no = "NO"
 
-
 main :: IO ()
 main = do
   pure ()
