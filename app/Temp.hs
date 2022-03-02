@@ -88,8 +88,8 @@ import           Prelude                 hiding ( (!!)
 ----------
 
 yes, no :: T.Text
-yes = "YES"
-no = "NO"
+yes = "Yes"
+no = "No"
 
 main :: IO ()
 main = do
