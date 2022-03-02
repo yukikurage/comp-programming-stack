@@ -625,17 +625,36 @@ dfs g i = ST.runST do
 -- Maze --
 ----------
 
-data Rules a = Rules Int Int (Char -> Char -> Maybe a)
+type Maze = A.Array (Int, Int) Char
+-- ^ 競プロでよく出るCharの迷路
 
-getMaze :: Rules a -> IO (Graph a)
-getMaze (Rules h w f) = do
-  res <- getLines h @(V.Vector T.Text)
-  let v =
-        A.listArray @A.Array ((0, 0), (h - 1, w - 1))
-          $ concatMap T.unpack
-          $ V.toList res
-  pure
-    $ gFromEdges (h * w)
+mzHeight :: Maze -> Int
+mzHeight = (+ 1) . fst . snd . A.bounds
+
+mzWidth :: Maze -> Int
+mzWidth = (+ 1) . snd . snd . A.bounds
+
+data MazeSize = MazeSize Int Int
+
+type Rules a = Char -> Char -> Maybe a
+
+readMaze :: T.Text -> Maze
+readMaze str = A.listArray ((0, 0), (h - 1, w - 1))
+  $ concatMap (T.unpack . T.take w) strs
+ where
+  strs = T.lines str
+  h    = length strs
+  w    = minimum $ map T.length strs
+
+getMaze :: MazeSize -> IO Maze
+getMaze (MazeSize h _) = readMaze <$> getLines h
+
+mazePos :: Maze -> (Int, Int) -> Int
+mazePos mz (i, j) = i * mzWidth mz + j
+
+mazeToGraph :: Rules a -> Maze -> Graph a
+mazeToGraph rules maze =
+  gFromEdges (h * w)
     $ V.fromList
     $ Maybe.catMaybes
     $ [ edge
@@ -646,13 +665,13 @@ getMaze (Rules h w f) = do
       , i' < h
       , j' >= 0
       , j' < w
-      , let c    = v A.! (i, j)
-      , let c'   = v A.! (i', j')
-      , let edge = (w * i + j, w * i' + j', ) <$> f c c'
+      , let c    = maze A.! (i, j)
+      , let c'   = maze A.! (i', j')
+      , let edge = (w * i + j, w * i' + j', ) <$> rules c c'
       ]
-
-mazePos :: Rules a -> (Int, Int) -> Int
-mazePos (Rules _ w _) (i, j) = i * w + j
+ where
+  h = mzHeight maze
+  w = mzWidth maze
 
 ----------
 -- Tree --

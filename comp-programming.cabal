@@ -44,6 +44,27 @@ executable abc241a
     , vector-algorithms ==0.8.0.3
   default-language: Haskell2010
 
+executable abc241c
+  main-is: abc241c.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/otherProblems
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
 executable atc002a
   main-is: atc002a.hs
   other-modules:
