@@ -634,8 +634,6 @@ mzHeight = (+ 1) . fst . snd . A.bounds
 mzWidth :: Maze -> Int
 mzWidth = (+ 1) . snd . snd . A.bounds
 
-data MazeSize = MazeSize Int Int
-
 type Rules a = Char -> Char -> Maybe a
 
 readMaze :: T.Text -> Maze
@@ -646,8 +644,8 @@ readMaze str = A.listArray ((0, 0), (h - 1, w - 1))
   h    = length strs
   w    = minimum $ map T.length strs
 
-getMaze :: MazeSize -> IO Maze
-getMaze (MazeSize h _) = readMaze <$> getLines h
+getMaze :: Int -> IO Maze
+getMaze h = readMaze <$> getLines h
 
 mazePos :: Maze -> (Int, Int) -> Int
 mazePos mz (i, j) = i * mzWidth mz + j
