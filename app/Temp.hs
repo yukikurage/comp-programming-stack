@@ -124,7 +124,7 @@ get = readText <$> TIO.getLine
 
 -- | ex) getLn @(V I) n, getLn @[I] n
 getLines :: Int -> forall a . ReadTextLines a => IO a
-getLines n = readTextLines . T.unlines <$> M.replicateM n TIO.getLine
+getLines n = readTextLines <$> M.replicateM n TIO.getLine
 
 -- | 改行なし出力
 output :: ShowText a => a -> IO ()
@@ -132,7 +132,7 @@ output = TIO.putStr . showText
 
 -- | 改行なし出力
 outputLines :: ShowTextLines a => a -> IO ()
-outputLines = TIO.putStr . showTextLines
+outputLines = TIO.putStr . T.unlines . showTextLines
 
 -- | 改行あり出力
 print :: ShowText a => a -> IO ()
@@ -140,7 +140,7 @@ print = TIO.putStrLn . showText
 
 -- | 改行あり出力
 printLines :: ShowTextLines a => a -> IO ()
-printLines = TIO.putStrLn . showTextLines
+printLines = TIO.putStrLn . T.unlines . showTextLines
 
 ---------------
 -- Read/Show --
@@ -234,34 +234,34 @@ showVec :: (VG.Vector v a, ShowText a) => v a -> T.Text
 showVec = showText . VG.toList
 
 class ReadTextLines a where
-  readTextLines :: T.Text -> a
+  readTextLines :: [T.Text] -> a
 
 class ShowTextLines a where
-  showTextLines :: a -> T.Text
+  showTextLines :: a -> [T.Text]
 
 instance ReadText a => ReadTextLines [a] where
-  readTextLines = map readText . T.lines
+  readTextLines = map readText
 
 instance ReadText a => ReadTextLines (V.Vector a) where
   readTextLines = readVecLines
 
 instance ReadTextLines T.Text where
-  readTextLines = id
+  readTextLines = T.unlines
 
 instance ShowText a => ShowTextLines [a] where
-  showTextLines = T.unlines . map showText
+  showTextLines = map showText
 
 instance ShowText a => ShowTextLines (V.Vector a) where
   showTextLines = showVecLines
 
 instance ShowTextLines T.Text where
-  showTextLines = id
+  showTextLines s = [s]
 
-readVecLines :: (VG.Vector v a, ReadText a) => T.Text -> v a
-readVecLines = VG.fromList . readTextLines
+readVecLines :: (VG.Vector v a, ReadText a) => [T.Text] -> v a
+readVecLines = VG.fromList . map readText
 
-showVecLines :: (VG.Vector v a, ShowText a) => v a -> T.Text
-showVecLines = showTextLines . VG.toList
+showVecLines :: (VG.Vector v a, ShowText a) => v a -> [T.Text]
+showVecLines = map showText . VG.toList
 
 ------------
 -- ModInt --
