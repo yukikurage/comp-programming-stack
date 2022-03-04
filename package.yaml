@@ -32,6 +32,7 @@ dependencies:
   - deepseq == 1.4.4.0
   - unboxing-vector == 0.1.1.0
   - text == 1.2.5.0
+  - unordered-containers == 0.2.10.0
 
 executables:
   template:

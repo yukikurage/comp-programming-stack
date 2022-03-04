@@ -44,6 +44,7 @@ import qualified Data.Char                     as Char
 import qualified Data.Complex                  as Comp
 import qualified Data.Foldable                 as Foldable
 import qualified Data.Function                 as Func
+import qualified Data.Functor                  as Functor
 import qualified Data.IORef                    as IORef
 import qualified Data.IntPSQ                   as PSQueue
 import qualified Data.Ix                       as Ix
@@ -80,7 +81,10 @@ import qualified Data.Vector.Mutable           as VM
 import qualified Debug.Trace                   as Trace
 import qualified GHC.TypeNats                  as TypeNats
 import           Prelude                 hiding ( (!!)
+                                                , head
                                                 , print
+                                                , tail
+                                                , uncons
                                                 )
 
 ----------
@@ -501,11 +505,11 @@ mpsqMinView q = do
 
 type MSequence m a = MutVar.MutVar m (Seq.Seq a)
 
-msEmpty :: Prim.PrimMonad m => m (MSequence (Prim.PrimState m) a)
-msEmpty = MutVar.newMutVar Seq.empty
+msqEmpty :: Prim.PrimMonad m => m (MSequence (Prim.PrimState m) a)
+msqEmpty = MutVar.newMutVar Seq.empty
 
-msSingleton :: Prim.PrimMonad m => a -> m (MSequence (Prim.PrimState m) a)
-msSingleton x = MutVar.newMutVar $ Seq.singleton x
+msqSingleton :: Prim.PrimMonad m => a -> m (MSequence (Prim.PrimState m) a)
+msqSingleton x = MutVar.newMutVar $ Seq.singleton x
 
 infixr 5 <<|
 infixl 5 |>>
@@ -518,22 +522,22 @@ x <<| xs = MutVar.modifyMutVar' xs (x Seq.<|)
 (|>>) :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> a -> m ()
 xs |>> x = MutVar.modifyMutVar' xs (Seq.|> x)
 
-msViewL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
-msViewL xs = do
+msqViewL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msqViewL xs = do
   xs' <- MutVar.readMutVar xs
   case viewl xs' of
     EmptyL -> pure Nothing
     x :< _ -> pure (Just x)
 
-msViewR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
-msViewR xs = do
+msqViewR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msqViewR xs = do
   xs' <- MutVar.readMutVar xs
   case viewr xs' of
     EmptyR    -> pure Nothing
     xs'' :> x -> pure (Just x)
 
-msPopL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
-msPopL xs = do
+msqPopL :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msqPopL xs = do
   xs' <- MutVar.readMutVar xs
   case viewl xs' of
     EmptyL    -> pure Nothing
@@ -541,14 +545,19 @@ msPopL xs = do
       MutVar.writeMutVar xs xs''
       pure (Just x)
 
-msPopR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
-msPopR xs = do
+msqPopR :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m (Maybe a)
+msqPopR xs = do
   xs' <- MutVar.readMutVar xs
   case viewr xs' of
     EmptyR    -> pure Nothing
     xs'' :> x -> do
       MutVar.writeMutVar xs xs''
       pure (Just x)
+
+msqNull :: Prim.PrimMonad m => MSequence (Prim.PrimState m) a -> m Bool
+msqNull xs = do
+  xs' <- MutVar.readMutVar xs
+  pure $ Seq.null xs'
 
 -----------
 -- Graph --
@@ -625,24 +634,19 @@ dfs g i = ST.runST do
 -- Maze --
 ----------
 
-type Maze = A.Array (Int, Int) Char
+type Maze = V.Vector (V.Vector Char)
 -- ^ 競プロでよく出るCharの迷路
 
 mzHeight :: Maze -> Int
-mzHeight = (+ 1) . fst . snd . A.bounds
+mzHeight = V.length
 
 mzWidth :: Maze -> Int
-mzWidth = (+ 1) . snd . snd . A.bounds
+mzWidth v = maybe 0 V.length (v !? 0)
 
 type Rules a = Char -> Char -> Maybe a
 
 readMaze :: T.Text -> Maze
-readMaze str = A.listArray ((0, 0), (h - 1, w - 1))
-  $ concatMap (T.unpack . T.take w) strs
- where
-  strs = T.lines str
-  h    = length strs
-  w    = minimum $ map T.length strs
+readMaze str = V.fromList $ map (V.fromList . T.unpack) $ T.lines str
 
 getMaze :: Int -> IO Maze
 getMaze h = readMaze <$> getLines h
@@ -652,24 +656,25 @@ mazePos mz (i, j) = i * mzWidth mz + j
 
 mazeToGraph :: Rules a -> Maze -> Graph a
 mazeToGraph rules maze =
-  gFromEdges (h * w)
-    $ V.fromList
-    $ Maybe.catMaybes
-    $ [ edge
-      | i        <- [0 .. h - 1]
-      , j        <- [0 .. w - 1]
-      , (i', j') <- [(i - 1, j), (i, j - 1), (i + 1, j), (i, j + 1)]
-      , i' >= 0
-      , i' < h
-      , j' >= 0
-      , j' < w
-      , let c    = maze A.! (i, j)
-      , let c'   = maze A.! (i', j')
-      , let edge = (w * i + j, w * i' + j', ) <$> rules c c'
-      ]
- where
-  h = mzHeight maze
-  w = mzWidth maze
+  let h = mzHeight maze
+      w = mzWidth maze
+      l = head [1]
+  in  gFromEdges (h * w)
+        $ V.fromList
+        $ Maybe.catMaybes
+        $ [ edge
+          | i        <- [0 .. h - 1]
+          , j        <- [0 .. w - 1]
+          , (i', j') <- [(i - 1, j), (i, j - 1), (i + 1, j), (i, j + 1)]
+          , i' >= 0
+          , i' < h
+          , j' >= 0
+          , j' < w
+          , let c    = maze ! i ! j
+          , let c' = maze ! i' ! j'
+          , let edge = (w * i + j, w * i' + j', ) <$> rules c c'
+          ]
+
 
 ----------
 -- Tree --
@@ -682,9 +687,119 @@ depth (Tree.Node a xs) b          = case Maybe.mapMaybe (`depth` b) xs of
   [] -> Nothing
   xs -> Just $ 1 + minimum xs
 
+
+--------------
+-- MultiSet --
+--------------
+
+type MultiSet a = Map.Map a Int
+
+msEmpty :: MultiSet a
+msEmpty = Map.empty
+
+msSingleton :: a -> MultiSet a
+msSingleton a = Map.singleton a 1
+
+msFromList :: Ord a => [a] -> MultiSet a
+msFromList = Map.fromListWith (+) . map (, 1)
+
+msInsert :: Ord a => a -> MultiSet a -> MultiSet a
+msInsert a = Map.insertWith (+) a 1
+
+msDelete :: Ord a => a -> MultiSet a -> MultiSet a
+msDelete = Map.update (\n -> if n > 1 then Just (n - 1) else Nothing)
+
+msMember :: Ord a => a -> MultiSet a -> Bool
+msMember = Map.member
+
+msLookupLT :: Ord a => a -> MultiSet a -> Maybe a
+msLookupLT a = fmap fst . Map.lookupLT a
+
+msLookupGT :: Ord a => a -> MultiSet a -> Maybe a
+msLookupGT a = fmap fst . Map.lookupGT a
+
+msLookupLE :: Ord a => a -> MultiSet a -> Maybe a
+msLookupLE a = fmap fst . Map.lookupLE a
+
+msLookupGE :: Ord a => a -> MultiSet a -> Maybe a
+msLookupGE a = fmap fst . Map.lookupGE a
+
+msNull :: MultiSet a -> Bool
+msNull = Map.null
+
+msUnion :: Ord a => MultiSet a -> MultiSet a -> MultiSet a
+msUnion = Map.unionWith (+)
+
+---------------------
+-- MutableMultiSet --
+---------------------
+
+type MutableMultiSet m a = MutVar.MutVar m (MultiSet a)
+
+mmsEmpty :: Prim.PrimMonad m => m (MutableMultiSet (Prim.PrimState m) a)
+mmsEmpty = MutVar.newMutVar msEmpty
+
+mmsSingleton
+  :: Prim.PrimMonad m => a -> m (MutableMultiSet (Prim.PrimState m) a)
+mmsSingleton a = MutVar.newMutVar $ msSingleton a
+
+mmsFromList
+  :: Prim.PrimMonad m
+  => Ord a => [a] -> m (MutableMultiSet (Prim.PrimState m) a)
+mmsFromList = MutVar.newMutVar . msFromList
+
+mmsInsert
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m ()
+mmsInsert mms a = MutVar.modifyMutVar' mms $ msInsert a
+
+mmsDelete
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m ()
+mmsDelete mms a = MutVar.modifyMutVar' mms $ msDelete a
+
+mmsMember
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m Bool
+mmsMember mms a = MutVar.readMutVar mms Functor.<&> msMember a
+
+mmsLookupLT
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupLT mms a = MutVar.readMutVar mms Functor.<&> msLookupLT a
+
+mmsLookupGT
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupGT mms a = MutVar.readMutVar mms Functor.<&> msLookupGT a
+
+mmsLookupLE :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupLE mms a = MutVar.readMutVar mms Functor.<&> msLookupLE a
+
+mmsLookupGE :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupGE mms a = MutVar.readMutVar mms Functor.<&> msLookupGE a
+
+mmsNull :: Prim.PrimMonad m => MutableMultiSet (Prim.PrimState m) a -> m Bool
+mmsNull mms = MutVar.readMutVar mms Functor.<&> msNull
+
+mmsUnion :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> MutableMultiSet (Prim.PrimState m) a -> m ()
+mmsUnion mms1 mms2 = do
+  ms1 <- MutVar.readMutVar mms1
+  ms2 <- MutVar.readMutVar mms2
+  MutVar.modifyMutVar' mms1 $ msUnion ms2
+
 ------------
 -- Others --
 ------------
+
+head :: V.Vector a -> Maybe a
+head v = if V.null v then Nothing else Just (v V.! 0)
+
+tail :: V.Vector a -> Maybe (V.Vector a)
+tail v = if V.null v then Nothing else Just (V.tail v)
+
+uncons :: V.Vector a -> Maybe (a, V.Vector a)
+uncons v = if V.null v then Nothing else Just (v V.! 0, V.tail v)
 
 while :: Monad m => m Bool -> m ()
 while f = f >>= \frag -> M.when frag $ while f

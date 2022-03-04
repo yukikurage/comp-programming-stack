@@ -51,6 +51,7 @@ extra-deps:
 - vector-algorithms-0.8.0.3@sha256:477ef5ac82fdd28a39536ed0a767faec3425802827abee485be31db5bc6f5e90,3488
 - text-1.2.5.0@sha256:791f0f6c97ed96113f17ab520cf0efe1a3a4f883a8c85910a5660567c8241c40,7895
 - binary-0.8.9.0@sha256:9cac9a1d86bfa3e7f75cc8bffaa256f3967ebb6d76f67a42f9679384c5c5e18a,6523
+- unordered-containers-0.2.10.0@sha256:5e9b095a9283d9e2f064fec73a81a6b6ea0b7fda3f219a8175785d2d2a3de204,5199
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
