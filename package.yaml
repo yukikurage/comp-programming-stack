@@ -47,3 +47,6 @@ executables:
   abc241c:
     source-dirs: problems/otherProblems
     main: abc241c.hs
+  abc241d:
+    source-dirs: problems/otherProblems
+    main: abc241d.hs
