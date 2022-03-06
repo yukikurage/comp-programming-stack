@@ -27,6 +27,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns         #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
 
@@ -45,6 +46,7 @@ import qualified Control.Monad.Writer          as Writer
 import qualified Data.Array.IArray             as A
 import qualified Data.Array.IO                 as AIO
 import qualified Data.Array.ST                 as AST
+import           Data.Bifunctor
 import qualified Data.Bits                     as Bits
 import qualified Data.ByteString.Char8         as BS
 import qualified Data.Char                     as Char
@@ -89,7 +91,6 @@ import qualified Data.Vector.Unboxed
 import qualified Data.Vector.Unboxing          as VU
 import qualified Data.Vector.Unboxing.Mutable  as VUM
 import qualified Debug.Trace                   as Trace
-import           Debug.Trace                    ( traceShow )
 import qualified GHC.Generics
 import qualified GHC.TypeNats                  as TypeNats
 import           Prelude                 hiding ( (!)
@@ -109,9 +110,19 @@ yes, no :: BS.ByteString
 yes = "Yes"
 no = "No"
 
+-- | 与えられた文字列より辞書順で小さが，同じ文字数の文字列の総数
+countDict :: BS -> Mod I 998244353
+countDict bs = case BS.uncons bs of
+  Just (h, t) ->
+    let x = fromIntegral $ Char.ord h - Char.ord 'A'
+    in  x * 26 ^ (BS.length bs - 1) + countDict t
+  Nothing -> 1
+
 main :: IO ()
 main = do
-  pure ()
+  let st  = stFromV rmq ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9] :: V (Inf I))
+      st2 = stUpdate 0 5 20 st
+  print $ fst $ stFold 3 5 st2
 
 -------------
 -- Library --
@@ -121,7 +132,7 @@ type V = V.Vector
 type VU = VU.Vector
 type VM = VM.MVector
 type VUM = VUM.MVector
-type T = BS.ByteString
+type BS = BS.ByteString
 type I = Int
 type IG = Int
 type D = Double
@@ -177,10 +188,14 @@ class ShowText a where
   showText :: a -> BS.ByteString
 
 instance ReadText Int where
-  readText s = read $ BS.unpack s
+  readText s = case BS.readInt s of
+    Just (i, _) -> i
+    Nothing     -> error "readText Int"
 
 instance ReadText Integer where
-  readText = fromIntegral . (readText @Int)
+  readText s = case BS.readInteger s of
+    Just (i, _) -> i
+    Nothing     -> error "readText Integer"
 
 instance ReadText Double where
   readText = read . BS.unpack
@@ -280,6 +295,15 @@ instance (ReadText a, VU.Unboxable a) => ReadTextLines (VU.Vector a) where
 instance ReadTextLines BS.ByteString where
   readTextLines = BS.unlines
 
+instance (ReadText a, ReadText b) => ReadTextLines (a, b) where
+  readTextLines (a : b : _) = (readText a, readText b)
+  readTextLines _ = error "Invalid Format :: readTextLines :: [BS] -> (a, b)"
+
+instance (ReadText a, ReadText b, ReadText c) => ReadTextLines (a, b, c) where
+  readTextLines (a : b : c : _) = (readText a, readText b, readText c)
+  readTextLines _ =
+    error "Invalid Format :: readTextLines :: [BS] -> (a, b, c)"
+
 instance ShowText a => ShowTextLines [a] where
   showTextLines = map showText
 
@@ -291,6 +315,12 @@ instance (ShowText a, VU.Unboxable a) => ShowTextLines (VU.Vector a) where
 
 instance ShowTextLines BS.ByteString where
   showTextLines s = [s]
+
+instance (ShowText a, ShowText b) => ShowTextLines (a, b) where
+  showTextLines (a, b) = [showText a, showText b]
+
+instance (ShowText a, ShowText b, ShowText c) => ShowTextLines (a, b, c) where
+  showTextLines (a, b, c) = [showText a, showText b, showText c]
 
 readVecLines :: (VG.Vector v a, ReadText a) => [BS.ByteString] -> v a
 readVecLines = VG.fromList . map readText
@@ -306,6 +336,9 @@ newtype Mod a (p :: TypeNats.Nat) = ModInt a deriving (Eq, Show, VU.Unboxable)
 
 instance ShowText a => ShowText (Mod a p) where
   showText (ModInt x) = showText x
+
+instance ReadText a => ReadText (Mod a p) where
+  readText = ModInt . readText
 
 instance (TypeNats.KnownNat p, Integral a) => Num (Mod a p) where
   (ModInt x) + (ModInt y) = ModInt $ (x + y) `mod` p
@@ -741,7 +774,7 @@ msInserts :: Ord a => a -> Int -> MultiSet a -> MultiSet a
 msInserts = Map.insertWith (+)
 
 msDelete :: Ord a => a -> MultiSet a -> MultiSet a
-msDelete a = Map.update (\n -> if n > 1 then Just (n - 1) else Nothing) a
+msDelete = Map.update (\n -> if n > 1 then Just (n - 1) else Nothing)
 
 msDeletes :: Ord a => a -> Int -> MultiSet a -> MultiSet a
 msDeletes a n = Map.update (\n' -> if n' > n then Just (n' - n) else Nothing) a
@@ -912,47 +945,114 @@ mmsElemAtG mms i = MutVar.readMutVar mms Functor.<&> msElemAtG i
 -- Segment Tree --
 ------------------
 
-data SegmentTree a = StBranch Int a (SegmentTree a) (SegmentTree a) | StLeaf a deriving (Show)
+-- | a, b はモノイドを構成
+-- | stApplyは次を満たす必要がある
+-- | stApply a stMemptyB == a
+-- | stApply (stAppendA a a') b == stAppendA (stApply a b) (stApply a' b)
+-- | stApply (stApply a b) b' == stApply (stApply a b) (stApply a b')
+data StOps a b = StOps
+  { stMemptyA :: a -- a のモノイド単位元
+  , stAppendA :: a -> a -> a -- a のモノイド演算
+  , stMemptyB :: b -- b のモノイド単位元
+  , stAppendB :: b -> b -> b -- b のモノイド演算
+  , stApply   :: a -> b -> a -- a に b を適用
+  }
 
-stRoot :: SegmentTree a -> a
-stRoot (StBranch _ a _ _) = a
-stRoot (StLeaf a        ) = a
+data SegmentTree a b = SegmentTree
+  { stValue    :: a
+  , stLazy     :: b
+  , stHeight   :: Int
+  , stChildren :: Maybe (SegmentTree a b, SegmentTree a b) -- Nothing なら葉 Just (l, r) なら枝
+  , stOps      :: StOps a b
+  }
 
--- | Vector から セグ木を構築
-stFromV :: VG.Vector v a => (a -> a -> a) -> v a -> SegmentTree a
-stFromV f xs
-  | VG.length xs == 1
-  = StLeaf $ VG.head xs
-  | otherwise
-  = let depth  = ceiling (logBase 2 (fromIntegral (VG.length xs))) -- rootを0としたときの，木の高さ
-        (l, r) = VG.splitAt (2 ^ (depth - 1)) xs
-        lst    = stFromV f l
-        rst    = stFromV f r
-    in  StBranch depth (f (stRoot lst) (stRoot rst)) lst rst
+-- | Vector からセグ木を構築
+stFromV :: VG.Vector v a => StOps a b -> v a -> SegmentTree a b
+stFromV stOps xs =
+  let height = ceiling $ logBase 2 $ fromIntegral $ VG.length xs --全体の高さ(0-indexed)
+      stFromVInternal height' xs'
+        | height' == 0
+        = SegmentTree { stValue = Maybe.fromMaybe (stMemptyA stOps) $ xs' !? 0
+                      , stLazy     = stMemptyB stOps
+                      , stHeight   = 0
+                      , stChildren = Nothing
+                      , stOps
+                      }
+        | otherwise
+        = let (ls, rs) = VG.splitAt (2 ^ (height' - 1)) xs'
+              stL      = stFromVInternal (height' - 1) ls
+              stR      = stFromVInternal (height' - 1) rs
+          in  SegmentTree
+                { stValue    = stAppendA stOps (stValue stL) (stValue stR)
+                , stLazy     = stMemptyB stOps
+                , stHeight   = height'
+                , stChildren = Just (stL, stR)
+                , stOps
+                }
+  in  stFromVInternal height xs
 
-stUpdate :: (a -> a -> a) -> Int -> a -> SegmentTree a -> SegmentTree a
-stUpdate f 0 a (StLeaf _) = StLeaf a
-stUpdate _ _ _ (StLeaf _) = error "stUpdate: out of range"
-stUpdate f i a (StBranch d _ l r)
-  | i < 2 ^ (d - 1)
-  = let l' = stUpdate f i a l in StBranch d (f (stRoot l') (stRoot r)) l' r
-  | otherwise
-  = let r' = stUpdate f (i - 2 ^ (d - 1)) a r
-    in  StBranch d (f (stRoot l) (stRoot r')) l r'
+-- | 親から伝播してきた遅延評価値を適用する
+stReceive :: b -> SegmentTree a b -> SegmentTree a b
+stReceive x st@SegmentTree { stOps, stLazy } =
+  st { stLazy = stAppendB stOps x stLazy }
 
-stFold :: (a -> a -> a) -> Int -> Int -> SegmentTree a -> a
-stFold f _ _ (StLeaf a) = a
-stFold f lb rb (StBranch d a l r)
-  | lb == 0 && rb == 2 ^ d
-  = a
-  | rb <= 2 ^ (d - 1)
-  = stFold f lb rb l
-  | lb >= 2 ^ (d - 1)
-  = stFold f (lb - 2 ^ (d - 1)) (rb - 2 ^ (d - 1)) r
-  | otherwise
-  = let lres = stFold f lb (2 ^ (d - 1)) l
-        rres = stFold f 0 (rb - 2 ^ (d - 1)) r
-    in  f lres rres
+stEval :: Eq b => SegmentTree a b -> SegmentTree a b
+stEval st@SegmentTree { stValue, stLazy, stChildren, stOps } =
+  if stLazy == stMemptyB stOps -- 既に評価されているなら
+    then st -- 何もしない
+    else st
+      { stValue    = stApply stOps stValue stLazy -- 遅延評価の適用
+      , stLazy     = stMemptyB stOps
+      , stChildren = fmap (bimap (stReceive stLazy) (stReceive stLazy))
+                          stChildren
+      }
+
+-- | 値を更新
+-- | l: 左端のインデックス， r: 右端のインデックス + 1, b: 更新する値
+stUpdate :: Eq b => Int -> Int -> b -> SegmentTree a b -> SegmentTree a b
+stUpdate l r b st =
+  let newSt@SegmentTree { stLazy, stChildren, stOps, stHeight } = stEval st
+  in
+    if
+      | l <= 0 && r >= 2 ^ stHeight -> stEval $ stReceive b newSt
+      | l < 2 ^ stHeight && r > 0 -> case stChildren of
+        Just (stL, stR) ->
+          let stL' = stUpdate l r b stL
+              stR' = stUpdate (l - 2 ^ (stHeight - 1))
+                              (r - 2 ^ (stHeight - 1))
+                              b
+                              stR
+          in  newSt { stValue    = stAppendA stOps (stValue stL') (stValue stR')
+                    , stChildren = Just (stL', stR')
+                    }
+        _ -> newSt
+      | otherwise -> newSt
+
+-- | クエリを実行
+stFold :: Eq b => Int -> Int -> SegmentTree a b -> (a, SegmentTree a b)
+stFold l r st =
+  let newSt@SegmentTree { stLazy, stChildren, stOps, stHeight } = stEval st
+  in
+    if
+      | 2 ^ stHeight <= l || r <= 0 -> (stMemptyA stOps, newSt)
+      | l <= 0 && r >= 2 ^ stHeight -> (stValue newSt, newSt)
+      | otherwise -> case stChildren of
+        Just (stL, stR) ->
+          let (aL, newStL) = stFold l r stL
+              (aR, newStR) =
+                stFold (l - 2 ^ (stHeight - 1)) (r - 2 ^ (stHeight - 1)) stR
+          in  ( stAppendA stOps aL aR
+              , newSt { stChildren = Just (newStL, newStR) }
+              )
+        _ -> (stMemptyA stOps, newSt)
+
+rmq :: Num a => Ord a => StOps (Inf a) (Inf a)
+rmq = StOps { stMemptyA = infinity
+            , stAppendA = min
+            , stMemptyB = infinity
+            , stAppendB = const id
+            , stApply   = const id
+            }
 
 ------------
 -- Others --
