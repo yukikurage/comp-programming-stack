@@ -24,7 +24,9 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns         #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -35,14 +37,19 @@ module Main where
 import           Control.Arrow                  ( (>>>) )
 import qualified Control.Monad                 as M
 import qualified Control.Monad.Primitive       as Prim
+import qualified Control.Monad.RWS             as RWS
+import qualified Control.Monad.Reader          as Reader
 import qualified Control.Monad.ST              as ST
+import qualified Control.Monad.State           as State
+import qualified Control.Monad.Writer          as Writer
 import qualified Data.Array.IArray             as A
 import qualified Data.Array.IO                 as AIO
 import qualified Data.Array.ST                 as AST
 import qualified Data.Bits                     as Bits
+import qualified Data.ByteString.Char8         as BS
 import qualified Data.Char                     as Char
 import qualified Data.Complex                  as Comp
-import qualified Data.Foldable                 as Foldable
+import           Data.Foldable
 import qualified Data.Function                 as Func
 import qualified Data.Functor                  as Functor
 import qualified Data.IORef                    as IORef
@@ -78,20 +85,27 @@ import           Data.Vector.Generic            ( (!)
 import qualified Data.Vector.Generic           as VG
 import qualified Data.Vector.Generic.Mutable   as VGM
 import qualified Data.Vector.Mutable           as VM
+import qualified Data.Vector.Unboxed
+import qualified Data.Vector.Unboxing          as VU
+import qualified Data.Vector.Unboxing.Mutable  as VUM
 import qualified Debug.Trace                   as Trace
+import           Debug.Trace                    ( traceShow )
+import qualified GHC.Generics
 import qualified GHC.TypeNats                  as TypeNats
-import           Prelude                 hiding ( (!!)
+import           Prelude                 hiding ( (!)
                                                 , head
+                                                , map
                                                 , print
                                                 , tail
                                                 , uncons
                                                 )
+import qualified Prelude
 
 ----------
 -- Main --
 ----------
 
-yes, no :: T.Text
+yes, no :: BS.ByteString
 yes = "Yes"
 no = "No"
 
@@ -104,19 +118,24 @@ main = do
 -------------
 
 type V = V.Vector
+type VU = VU.Vector
 type VM = VM.MVector
-type T = T.Text
+type VUM = VUM.MVector
+type T = BS.ByteString
 type I = Int
-type IG = Integer
+type IG = Int
 type D = Double
 type B = Bool
 type S = String
 
-default (V.Vector, [], T.Text, String, Int, Double)
+default (V.Vector, [], BS.ByteString, String, Int, Double)
 
 infixl 1 #
 (#) :: a -> (a -> b) -> b
 (#) a f = f a
+
+map :: Monad m => (a -> b) -> m a -> m b
+map = fmap
 
 ---------
 -- I/O --
@@ -124,27 +143,27 @@ infixl 1 #
 
 -- | ex) get @I, get @(V I) ..
 get :: ReadText a => IO a
-get = readText <$> TIO.getLine
+get = readText <$> BS.getLine
 
 -- | ex) getLn @(V I) n, getLn @[I] n
 getLines :: Int -> forall a . ReadTextLines a => IO a
-getLines n = readTextLines <$> M.replicateM n TIO.getLine
+getLines n = readTextLines <$> M.replicateM n BS.getLine
 
 -- | 改行なし出力
 output :: ShowText a => a -> IO ()
-output = TIO.putStr . showText
+output = BS.putStr . showText
 
 -- | 改行なし出力
 outputLines :: ShowTextLines a => a -> IO ()
-outputLines = TIO.putStr . T.unlines . showTextLines
+outputLines = BS.putStr . BS.unlines . showTextLines
 
 -- | 改行あり出力
 print :: ShowText a => a -> IO ()
-print = TIO.putStrLn . showText
+print = BS.putStrLn . showText
 
 -- | 改行あり出力
 printLines :: ShowTextLines a => a -> IO ()
-printLines = TIO.putStrLn . T.unlines . showTextLines
+printLines = BS.putStrLn . BS.unlines . showTextLines
 
 ---------------
 -- Read/Show --
@@ -152,96 +171,102 @@ printLines = TIO.putStrLn . T.unlines . showTextLines
 
 -- | Text版Read
 class ReadText a where
-  readText :: T.Text -> a
+  readText :: BS.ByteString -> a
 
 class ShowText a where
-  showText :: a -> T.Text
+  showText :: a -> BS.ByteString
 
 instance ReadText Int where
-  readText s = read $ T.unpack s
+  readText s = read $ BS.unpack s
 
 instance ReadText Integer where
   readText = fromIntegral . (readText @Int)
 
 instance ReadText Double where
-  readText = read . T.unpack
+  readText = read . BS.unpack
 
-instance ReadText T.Text where
+instance ReadText BS.ByteString where
   readText = id
 
-instance (ReadText a) => ReadText (V.Vector a) where
+instance ReadText a => ReadText (V.Vector a) where
+  readText = readVec
+
+instance (ReadText a, VUM.Unboxable a) => ReadText (VU.Vector a) where
   readText = readVec
 
 instance ReadText a => ReadText [a] where
-  readText = map readText . T.words
+  readText = map readText . BS.words
 
 instance (ReadText a, ReadText b) => ReadText (a, b) where
-  readText (T.words -> [a, b]) = (readText a, readText b)
+  readText (BS.words -> [a, b]) = (readText a, readText b)
   readText _ = error "Invalid Format :: readText :: BS -> (a, b)"
 
 instance (ReadText a, ReadText b, ReadText c) => ReadText (a, b, c) where
-  readText (T.words -> [a, b, c]) = (readText a, readText b, readText c)
+  readText (BS.words -> [a, b, c]) = (readText a, readText b, readText c)
   readText _ = error "Invalid Format :: readText :: BS -> (a, b, c)"
 
 instance (ReadText a, ReadText b, ReadText c, ReadText d) => ReadText (a, b, c, d) where
-  readText (T.words -> [a, b, c, d]) =
+  readText (BS.words -> [a, b, c, d]) =
     (readText a, readText b, readText c, readText d)
   readText _ = error "Invalid Format :: readText :: BS -> (a, b, c, d)"
 
-instance ShowText Int where
-  showText = T.pack . show
-
 instance ShowText Integer where
-  showText = T.pack . show
+  showText = BS.pack . show
+
+instance ShowText Int where
+  showText = BS.pack . show
 
 instance ShowText Double where
-  showText = T.pack . show
+  showText = BS.pack . show
 
 instance ShowText Bool where
   showText True  = yes
   showText False = no
 
-instance ShowText T.Text where
+instance ShowText BS.ByteString where
   showText = id
 
 instance (ShowText a) => ShowText (V.Vector a) where
   showText = showVec
 
+instance (ShowText a, VU.Unboxable a) => ShowText (VU.Vector a) where
+  showText = showVec
+
 instance ShowText a => ShowText [a] where
-  showText = T.unwords . map showText
+  showText = BS.unwords . map showText
 
 instance (ShowText a, ShowText b) => ShowText (a, b) where
-  showText (a, b) = showText a `T.append` " " `T.append` showText b
+  showText (a, b) = showText a `BS.append` " " `BS.append` showText b
 
 instance (ShowText a, ShowText b, ShowText c) => ShowText (a, b, c) where
   showText (a, b, c) =
     showText a
-      `T.append` " "
-      `T.append` showText b
-      `T.append` " "
-      `T.append` showText c
+      `BS.append` " "
+      `BS.append` showText b
+      `BS.append` " "
+      `BS.append` showText c
 
 instance (ShowText a, ShowText b, ShowText c, ShowText d) => ShowText (a, b, c, d) where
   showText (a, b, c, d) =
     showText a
-      `T.append` " "
-      `T.append` showText b
-      `T.append` " "
-      `T.append` showText c
-      `T.append` " "
-      `T.append` showText d
+      `BS.append` " "
+      `BS.append` showText b
+      `BS.append` " "
+      `BS.append` showText c
+      `BS.append` " "
+      `BS.append` showText d
 
-readVec :: (VG.Vector v a, ReadText a) => T.Text -> v a
+readVec :: (VG.Vector v a, ReadText a) => BS.ByteString -> v a
 readVec = VG.fromList . readText
 
-showVec :: (VG.Vector v a, ShowText a) => v a -> T.Text
+showVec :: (VG.Vector v a, ShowText a) => v a -> BS.ByteString
 showVec = showText . VG.toList
 
 class ReadTextLines a where
-  readTextLines :: [T.Text] -> a
+  readTextLines :: [BS.ByteString] -> a
 
 class ShowTextLines a where
-  showTextLines :: a -> [T.Text]
+  showTextLines :: a -> [BS.ByteString]
 
 instance ReadText a => ReadTextLines [a] where
   readTextLines = map readText
@@ -249,8 +274,11 @@ instance ReadText a => ReadTextLines [a] where
 instance ReadText a => ReadTextLines (V.Vector a) where
   readTextLines = readVecLines
 
-instance ReadTextLines T.Text where
-  readTextLines = T.unlines
+instance (ReadText a, VU.Unboxable a) => ReadTextLines (VU.Vector a) where
+  readTextLines = readVecLines
+
+instance ReadTextLines BS.ByteString where
+  readTextLines = BS.unlines
 
 instance ShowText a => ShowTextLines [a] where
   showTextLines = map showText
@@ -258,20 +286,23 @@ instance ShowText a => ShowTextLines [a] where
 instance ShowText a => ShowTextLines (V.Vector a) where
   showTextLines = showVecLines
 
-instance ShowTextLines T.Text where
+instance (ShowText a, VU.Unboxable a) => ShowTextLines (VU.Vector a) where
+  showTextLines = showVecLines
+
+instance ShowTextLines BS.ByteString where
   showTextLines s = [s]
 
-readVecLines :: (VG.Vector v a, ReadText a) => [T.Text] -> v a
+readVecLines :: (VG.Vector v a, ReadText a) => [BS.ByteString] -> v a
 readVecLines = VG.fromList . map readText
 
-showVecLines :: (VG.Vector v a, ShowText a) => v a -> [T.Text]
+showVecLines :: (VG.Vector v a, ShowText a) => v a -> [BS.ByteString]
 showVecLines = map showText . VG.toList
 
 ------------
 -- ModInt --
 ------------
 
-newtype Mod a (p :: TypeNats.Nat) = ModInt a deriving (Eq, Show)
+newtype Mod a (p :: TypeNats.Nat) = ModInt a deriving (Eq, Show, VU.Unboxable)
 
 instance ShowText a => ShowText (Mod a p) where
   showText (ModInt x) = showText x
@@ -291,7 +322,7 @@ instance (TypeNats.KnownNat p, Integral a) => Num (Mod a p) where
 instance (TypeNats.KnownNat p, Integral a) => Fractional (Mod a p) where
   recip (ModInt n)
     | gcd n p /= 1 = error
-      "recip :: Mod a p -> Mod a p : The inverse element does not exisTIO."
+      "recip :: Mod a p -> Mod a p : The inverse element does not exisBS."
     | otherwise = ModInt . fst $ extendedEuc n (-p)
     where p = fromIntegral $ TypeNats.natVal (Proxy.Proxy :: Proxy.Proxy p)
   fromRational r = ModInt n / ModInt d   where
@@ -388,10 +419,6 @@ instance (Num a, Ord a) => Ord (Inf a) where
       Infinity sign -> if sign == Positive then LT else GT
       Finity   y    -> compare x y
 
-(.!) :: (VG.Vector v p, Num p) => v p -> Int -> p
-xs .! i | i >= 0 && i < VG.length xs = xs ! i
-        | otherwise                  = 0
-
 infinity :: Num a => Inf a
 infinity = Infinity Positive
 
@@ -410,20 +437,14 @@ dropWhileRev f xs | VG.null xs = VG.empty
 -- Disjoint Set --
 ------------------
 
-type DisjointSet = V.Vector Int
+type DisjointSet = VU.Vector Int
 data DisjointSetM m = DSet
-  { dsParents :: VM.MVector m Int
-  , dsDepths  :: VM.MVector m Int
+  { dsParents :: VUM.MVector m Int
+  , dsDepths  :: VUM.MVector m Int
   }
 
-dsFromEdges :: Int -> V.Vector (Int, Int) -> DisjointSet
-dsFromEdges n edges = V.create do
-  ds <- newDSet n
-  V.forM_ edges $ uncurry (union ds)
-  return $ dsParents ds
-
 newDSet :: Prim.PrimMonad m => Int -> m (DisjointSetM (Prim.PrimState m))
-newDSet n = DSet <$> V.thaw (V.generate n id) <*> VM.replicate n 1
+newDSet n = DSet <$> VU.thaw (VU.generate n id) <*> VUM.replicate n 1
 
 root :: DisjointSet -> Int -> Int
 root xs i | xs ! i == i = i
@@ -434,9 +455,9 @@ find xs i j = root xs i == root xs j
 
 -- | ルートを調べる時につなぎ直す
 rootM :: Prim.PrimMonad m => DisjointSetM (Prim.PrimState m) -> Int -> m Int
-rootM ds i = VM.read (dsParents ds) i >>= \p -> if p == i
-  then return i
-  else rootM ds p >>= \r -> VM.write (dsParents ds) i r >> return r
+rootM ds i = VUM.read (dsParents ds) i >>= \p -> if p == i
+  then pure i
+  else rootM ds p >>= \r -> VUM.write (dsParents ds) i r >> pure r
 
 findM
   :: Prim.PrimMonad m => DisjointSetM (Prim.PrimState m) -> Int -> Int -> m Bool
@@ -447,16 +468,16 @@ union
 union ds i j = do
   rooti <- rootM ds i
   rootj <- rootM ds j
-  depi  <- VM.read (dsDepths ds) rooti
-  depj  <- VM.read (dsDepths ds) rootj
+  depi  <- VUM.read (dsDepths ds) rooti
+  depj  <- VUM.read (dsDepths ds) rootj
   if
     | depi == depj
-    -> VM.modify (dsDepths ds) (+ 1) rooti
-      >> VM.write (dsParents ds) rootj rooti
+    -> VUM.modify (dsDepths ds) (+ 1) rooti
+      >> VUM.write (dsParents ds) rootj rooti
     | depi > depj
-    -> VM.write (dsParents ds) rootj rooti
+    -> VUM.write (dsParents ds) rootj rooti
     | otherwise
-    -> VM.write (dsParents ds) rooti rootj
+    -> VUM.write (dsParents ds) rooti rootj
 
 ----------------------------
 -- Monadic Priority Queue --
@@ -493,10 +514,10 @@ mpsqMinView
 mpsqMinView q = do
   res <- PSQueue.minView <$> MutVar.readMutVar q
   case res of
-    Nothing            -> return Nothing
+    Nothing            -> pure Nothing
     Just (k, p, v, q') -> do
       MutVar.writeMutVar q q'
-      return $ Just (k, p, v)
+      pure $ Just (k, p, v)
 
 
 ----------------------
@@ -569,10 +590,10 @@ type UGraph = Graph ()
 gEmpty :: Graph a
 gEmpty = V.singleton []
 
-gFromEdges :: Int -> V.Vector (Int, Int, a) -> Graph a
+gFromEdges :: VG.Vector v (Int, Int, a) => Int -> v (Int, Int, a) -> Graph a
 gFromEdges n edges = ST.runST do
   v <- VM.replicate n []
-  V.forM_ edges \(i, j, a) -> VM.modify v ((j, a) :) i
+  VG.forM_ edges \(i, j, a) -> VM.modify v ((j, a) :) i
   V.freeze v
 
 -- | 辺をすべて反転させる
@@ -583,42 +604,54 @@ gReverse g = ST.runST do
   V.forM_ [0 .. n - 1] \i -> M.forM_ (g ! i) \(j, a) -> VM.modify v ((i, a) :) j
   V.freeze v
 
-dijkstra :: Graph Int -> Int -> V.Vector (Inf Int)
+-- | ダイクストラ法
+-- | グラフと頂点をとり，それぞれの辺への最短経路を求める
+-- | 辺は頂点の順序が逆になることに注意(Listのconsで要素を前にくっつけていくので)
+dijkstra :: Graph Int -> Int -> V.Vector (Inf Int, [Int])
 dijkstra g i = V.create do
   let n = V.length g
 
   -- 辺の距離の初期化
-  dists <- VM.replicate n infinity
-  VM.write dists i 0
+  -- dists ! j == (iからの距離, 経路)
+  dists <- VM.replicate n (infinity, [])
+  VM.write dists i (0, [i])
 
   -- キューの初期化
+  -- キューの中身は，key: 頂点, 優先度: 距離, value: ()
   queue <- mpsqSingleton i 0 ()
 
-  let
-    -- 頂点情報のアップデート処理
-      update v alt = do
-        VM.write dists v alt
+  let -- 頂点情報のアップデート処理
+      -- prev: 移動前の頂点, v: 更新対象, alt: その頂点までの(現段階での)距離
+      -- prev はすでに最短距離が確定している．
+      update prev v alt = do
+        (_, xs) <- VM.read dists prev
+        VM.write dists v (alt, v : xs)
+        -- アップデートした後には優先度付きキューに追加する，
+        -- 頂点をキーとしているので，同じ頂点が既にあった場合は上書きされる(典型的な C++ 実装での continue に相当)
         mpsqInsert queue v alt ()
 
       -- 確定した頂点を取り出したときの処理
+      -- u: 最短距離が確定した頂点
       processing u = do
-        dist_u <- VM.read dists u
+        -- その頂点から出る辺をすべて取り出す
+        (dist_u, _) <- VM.read dists u
         M.forM_
           (g ! u)
           (\(v, cost) -> do
-            dist_v <- VM.read dists v
+            (dist_v, _) <- VM.read dists v
             let alt = dist_u + fromIntegral cost
-            M.when (dist_v > alt) $ update v alt
+            M.when (dist_v > alt) $ update u v alt
           )
 
+  -- 繰り返し処理
   while do
     res <- mpsqMinView queue
     case res of
-      Nothing        -> return False
+      Nothing        -> pure False
       Just (u, _, _) -> do
         processing u
-        return True
-  return dists
+        pure True
+  pure dists
 
 dfs :: Graph a -> Int -> Tree.Tree Int
 dfs g i = ST.runST do
@@ -627,26 +660,26 @@ dfs g i = ST.runST do
         VM.write reached now True
         next     <- M.filterM (fmap not . VM.read reached) . map fst $ g ! now
         children <- M.mapM loop next
-        return $ Tree.Node now children
+        pure $ Tree.Node now children
   loop i
 
 ----------
 -- Maze --
 ----------
 
-type Maze = V.Vector (V.Vector Char)
+type Maze = V.Vector (VU.Vector Char)
 -- ^ 競プロでよく出るCharの迷路
 
 mzHeight :: Maze -> Int
 mzHeight = V.length
 
 mzWidth :: Maze -> Int
-mzWidth v = maybe 0 V.length (v !? 0)
+mzWidth v = maybe 0 VU.length (v !? 0)
 
 type Rules a = Char -> Char -> Maybe a
 
-readMaze :: T.Text -> Maze
-readMaze str = V.fromList $ map (V.fromList . T.unpack) $ T.lines str
+readMaze :: BS.ByteString -> Maze
+readMaze str = V.fromList $ map (VU.fromList . BS.unpack) $ BS.lines str
 
 getMaze :: Int -> IO Maze
 getMaze h = readMaze <$> getLines h
@@ -658,7 +691,6 @@ mazeToGraph :: Rules a -> Maze -> Graph a
 mazeToGraph rules maze =
   let h = mzHeight maze
       w = mzWidth maze
-      l = head [1]
   in  gFromEdges (h * w)
         $ V.fromList
         $ Maybe.catMaybes
@@ -687,7 +719,6 @@ depth (Tree.Node a xs) b          = case Maybe.mapMaybe (`depth` b) xs of
   [] -> Nothing
   xs -> Just $ 1 + minimum xs
 
-
 --------------
 -- MultiSet --
 --------------
@@ -701,13 +732,22 @@ msSingleton :: a -> MultiSet a
 msSingleton a = Map.singleton a 1
 
 msFromList :: Ord a => [a] -> MultiSet a
-msFromList = Map.fromListWith (+) . map (, 1)
+msFromList xs = Map.fromListWith (+) $ map (, 1) xs
 
 msInsert :: Ord a => a -> MultiSet a -> MultiSet a
 msInsert a = Map.insertWith (+) a 1
 
+msInserts :: Ord a => a -> Int -> MultiSet a -> MultiSet a
+msInserts = Map.insertWith (+)
+
 msDelete :: Ord a => a -> MultiSet a -> MultiSet a
-msDelete = Map.update (\n -> if n > 1 then Just (n - 1) else Nothing)
+msDelete a = Map.update (\n -> if n > 1 then Just (n - 1) else Nothing) a
+
+msDeletes :: Ord a => a -> Int -> MultiSet a -> MultiSet a
+msDeletes a n = Map.update (\n' -> if n' > n then Just (n' - n) else Nothing) a
+
+msDeleteAll :: Ord a => a -> MultiSet a -> MultiSet a
+msDeleteAll = Map.delete
 
 msMember :: Ord a => a -> MultiSet a -> Bool
 msMember = Map.member
@@ -729,6 +769,36 @@ msNull = Map.null
 
 msUnion :: Ord a => MultiSet a -> MultiSet a -> MultiSet a
 msUnion = Map.unionWith (+)
+
+-- | split MultiSet into two MultiSet
+-- | (LT, GE)
+msSplitLTGE :: Ord a => a -> MultiSet a -> (MultiSet a, MultiSet a)
+msSplitLTGE a ms =
+  let (lt, x, gt) = Map.splitLookup a ms
+      ge          = case x of
+        Nothing -> gt
+        Just v  -> msInserts a v gt
+  in  (lt, ge)
+
+msSplitLEGT :: Ord a => a -> MultiSet a -> (MultiSet a, MultiSet a)
+msSplitLEGT a ms =
+  let (lt, x, gt) = Map.splitLookup a ms
+      le          = case x of
+        Nothing -> lt
+        Just v  -> msInserts a v lt
+  in  (le, gt)
+
+msElemAtL :: Ord a => Int -> MultiSet a -> Maybe a
+msElemAtL i ms = case Map.minViewWithKey ms of
+  Nothing -> Nothing
+  Just ((k, v), rest) | i < v     -> Just k
+                      | otherwise -> msElemAtL (i - v) rest
+
+msElemAtG :: Ord a => Int -> MultiSet a -> Maybe a
+msElemAtG i ms = case Map.maxViewWithKey ms of
+  Nothing -> Nothing
+  Just ((k, v), rest) | i < v     -> Just k
+                      | otherwise -> msElemAtG (i - v) rest
 
 ---------------------
 -- MutableMultiSet --
@@ -753,10 +823,25 @@ mmsInsert
   => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m ()
 mmsInsert mms a = MutVar.modifyMutVar' mms $ msInsert a
 
+mmsInserts
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> Int -> m ()
+mmsInserts mms a n = MutVar.modifyMutVar' mms $ msInserts a n
+
 mmsDelete
   :: Prim.PrimMonad m
   => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m ()
 mmsDelete mms a = MutVar.modifyMutVar' mms $ msDelete a
+
+mmsDeletes
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> Int -> m ()
+mmsDeletes mms a n = MutVar.modifyMutVar' mms $ msDeletes a n
+
+mmsDeleteAll
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m ()
+mmsDeleteAll mms a = MutVar.modifyMutVar' mms $ msDeleteAll a
 
 mmsMember
   :: Prim.PrimMonad m
@@ -773,33 +858,114 @@ mmsLookupGT
   => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
 mmsLookupGT mms a = MutVar.readMutVar mms Functor.<&> msLookupGT a
 
-mmsLookupLE :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupLE
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
 mmsLookupLE mms a = MutVar.readMutVar mms Functor.<&> msLookupLE a
 
-mmsLookupGE :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
+mmsLookupGE
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> a -> m (Maybe a)
 mmsLookupGE mms a = MutVar.readMutVar mms Functor.<&> msLookupGE a
 
 mmsNull :: Prim.PrimMonad m => MutableMultiSet (Prim.PrimState m) a -> m Bool
 mmsNull mms = MutVar.readMutVar mms Functor.<&> msNull
 
-mmsUnion :: Prim.PrimMonad m => Ord a => MutableMultiSet (Prim.PrimState m) a -> MutableMultiSet (Prim.PrimState m) a -> m ()
+mmsUnion
+  :: Prim.PrimMonad m
+  => Ord a
+  => MutableMultiSet (Prim.PrimState m) a
+  -> MutableMultiSet (Prim.PrimState m) a
+  -> m ()
 mmsUnion mms1 mms2 = do
   ms1 <- MutVar.readMutVar mms1
   ms2 <- MutVar.readMutVar mms2
   MutVar.modifyMutVar' mms1 $ msUnion ms2
 
+mmsSplitLTGE
+  :: Prim.PrimMonad m
+  => Ord a
+  => MutableMultiSet (Prim.PrimState m) a
+  -> a
+  -> m (MultiSet a, MultiSet a)
+mmsSplitLTGE mms a = MutVar.readMutVar mms Functor.<&> msSplitLTGE a
+
+mmsSplitLEGT
+  :: Prim.PrimMonad m
+  => Ord a
+  => MutableMultiSet (Prim.PrimState m) a
+  -> a
+  -> m (MultiSet a, MultiSet a)
+mmsSplitLEGT mms a = MutVar.readMutVar mms Functor.<&> msSplitLEGT a
+
+mmsElemAtL
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> Int -> m (Maybe a)
+mmsElemAtL mms i = MutVar.readMutVar mms Functor.<&> msElemAtL i
+
+mmsElemAtG
+  :: Prim.PrimMonad m
+  => Ord a => MutableMultiSet (Prim.PrimState m) a -> Int -> m (Maybe a)
+mmsElemAtG mms i = MutVar.readMutVar mms Functor.<&> msElemAtG i
+
+------------------
+-- Segment Tree --
+------------------
+
+data SegmentTree a = StBranch Int a (SegmentTree a) (SegmentTree a) | StLeaf a deriving (Show)
+
+stRoot :: SegmentTree a -> a
+stRoot (StBranch _ a _ _) = a
+stRoot (StLeaf a        ) = a
+
+-- | Vector から セグ木を構築
+stFromV :: VG.Vector v a => (a -> a -> a) -> v a -> SegmentTree a
+stFromV f xs
+  | VG.length xs == 1
+  = StLeaf $ VG.head xs
+  | otherwise
+  = let depth  = ceiling (logBase 2 (fromIntegral (VG.length xs))) -- rootを0としたときの，木の高さ
+        (l, r) = VG.splitAt (2 ^ (depth - 1)) xs
+        lst    = stFromV f l
+        rst    = stFromV f r
+    in  StBranch depth (f (stRoot lst) (stRoot rst)) lst rst
+
+stUpdate :: (a -> a -> a) -> Int -> a -> SegmentTree a -> SegmentTree a
+stUpdate f 0 a (StLeaf _) = StLeaf a
+stUpdate _ _ _ (StLeaf _) = error "stUpdate: out of range"
+stUpdate f i a (StBranch d _ l r)
+  | i < 2 ^ (d - 1)
+  = let l' = stUpdate f i a l in StBranch d (f (stRoot l') (stRoot r)) l' r
+  | otherwise
+  = let r' = stUpdate f (i - 2 ^ (d - 1)) a r
+    in  StBranch d (f (stRoot l) (stRoot r')) l r'
+
+stFold :: (a -> a -> a) -> Int -> Int -> SegmentTree a -> a
+stFold f _ _ (StLeaf a) = a
+stFold f lb rb (StBranch d a l r)
+  | lb == 0 && rb == 2 ^ d
+  = a
+  | rb <= 2 ^ (d - 1)
+  = stFold f lb rb l
+  | lb >= 2 ^ (d - 1)
+  = stFold f (lb - 2 ^ (d - 1)) (rb - 2 ^ (d - 1)) r
+  | otherwise
+  = let lres = stFold f lb (2 ^ (d - 1)) l
+        rres = stFold f 0 (rb - 2 ^ (d - 1)) r
+    in  f lres rres
+
 ------------
 -- Others --
 ------------
 
-head :: V.Vector a -> Maybe a
-head v = if V.null v then Nothing else Just (v V.! 0)
+head :: VG.Vector v a => v a -> Maybe a
+head v = if VG.null v then Nothing else Just (v ! 0)
 
-tail :: V.Vector a -> Maybe (V.Vector a)
-tail v = if V.null v then Nothing else Just (V.tail v)
+tail :: VG.Vector v a => v a -> Maybe (v a)
+tail v = if VG.null v then Nothing else Just (VG.tail v)
 
-uncons :: V.Vector a -> Maybe (a, V.Vector a)
-uncons v = if V.null v then Nothing else Just (v V.! 0, V.tail v)
+uncons :: VG.Vector v a => v a -> Maybe (a, v a)
+uncons v = if VG.null v then Nothing else Just (v ! 0, VG.tail v)
 
 while :: Monad m => m Bool -> m ()
 while f = f >>= \frag -> M.when frag $ while f
@@ -837,17 +1003,17 @@ primeFact n
 primes :: forall a . Integral a => a -> [a]
 primes n | n <= 1    = []
          | otherwise = filter ((frags !) . fromIntegral) [2 .. n] where
-  frags = V.create do
-    v <- VM.replicate (fromIntegral (n + 1)) True
-    VM.write v 0 False
-    VM.write v 1 False
-    V.forM_
+  frags = VU.create do
+    v <- VUM.replicate (fromIntegral (n + 1)) True
+    VUM.write v 0 False
+    VUM.write v 1 False
+    VU.forM_
       [2 .. floor . sqrt @Double . fromIntegral $ n]
       \i -> do
-        frag <- VM.read v i
-        M.when frag
-          $ V.forM_ [2 * i, 3 * i .. fromIntegral n] \j -> VM.write v j False
-    return v
+        frag <- VUM.read v i
+        M.when frag $ VU.forM_ [2 * i, 3 * i .. fromIntegral n]
+                               \j -> VUM.write v j False
+    pure v
 
 -- | 拡張されたユークリッドの互除法
 -- | ax + by = gcd a b を解く

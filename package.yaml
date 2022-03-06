@@ -33,20 +33,27 @@ dependencies:
   - unboxing-vector == 0.1.1.0
   - text == 1.2.5.0
   - unordered-containers == 0.2.10.0
+  - mtl == 2.2.2
 
 executables:
   template:
     source-dirs: app
     main: Temp.hs
-  abc241a:
-    source-dirs: problems/otherProblems
-    main: abc241a.hs
-  atc002a:
-    source-dirs: problems/otherProblems
-    main: atc002a.hs
-  abc241c:
-    source-dirs: problems/otherProblems
-    main: abc241c.hs
-  abc241d:
-    source-dirs: problems/otherProblems
-    main: abc241d.hs
+  abc242a:
+    source-dirs: problems/abc242
+    main: a.hs
+  abc242b:
+    source-dirs: problems/abc242
+    main: b.hs
+  abc242c:
+    source-dirs: problems/abc242
+    main: c.hs
+  abc242d:
+    source-dirs: problems/abc242
+    main: d.hs
+  abc242e:
+    source-dirs: problems/abc242
+    main: e.hs
+  abc242f:
+    source-dirs: problems/abc242
+    main: f.hs
