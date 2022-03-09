@@ -151,19 +151,19 @@ get = readText <$> BS.getLine
 getLines :: Int -> forall a . ReadTextLines a => IO a
 getLines n = readTextLines <$> M.replicateM n BS.getLine
 
--- | 改行なし出力
+-- |
 output :: ShowText a => a -> IO ()
 output = BS.putStr . showText
 
--- | 改行なし出力
+-- |
 outputLines :: ShowTextLines a => a -> IO ()
 outputLines = BS.putStr . BS.unlines . showTextLines
 
--- | 改行あり出力
+-- |
 print :: ShowText a => a -> IO ()
 print = BS.putStrLn . showText
 
--- | 改行あり出力
+-- |
 printLines :: ShowTextLines a => a -> IO ()
 printLines = BS.putStrLn . BS.unlines . showTextLines
 
@@ -171,7 +171,7 @@ printLines = BS.putStrLn . BS.unlines . showTextLines
 -- Read/Show --
 ---------------
 
--- | Text版Read
+-- | TextRead
 class ReadText a where
   readText :: BS.ByteString -> a
 
@@ -477,7 +477,7 @@ root xs i | xs ! i == i = i
 find :: DisjointSet -> Int -> Int -> Bool
 find xs i j = root xs i == root xs j
 
--- | ルートを調べる時につなぎ直す
+-- |
 rootM :: Prim.PrimMonad m => DisjointSetM (Prim.PrimState m) -> Int -> m Int
 rootM ds i = VUM.read (dsParents ds) i >>= \p -> if p == i
   then pure i
@@ -525,13 +525,13 @@ mpsqInsert
   => Ord p => MPSQueue (Prim.PrimState m) p v -> Int -> p -> v -> m ()
 mpsqInsert m k p v = MutVar.modifyMutVar' m (PSQueue.insert k p v)
 
--- | 要素は削除せず，優先度が一番小さいものを取り出す
+-- |
 mpsqFindMin
   :: Prim.PrimMonad m
   => Ord p => MPSQueue (Prim.PrimState m) p v -> m (Maybe (Int, p, v))
 mpsqFindMin q = PSQueue.findMin <$> MutVar.readMutVar q
 
--- | 要素を削除して，優先度が一番小さいものを取り出す
+-- |
 mpsqMinView
   :: Prim.PrimMonad m
   => Ord p => MPSQueue (Prim.PrimState m) p v -> m (Maybe (Int, p, v))
@@ -608,7 +608,7 @@ msqNull xs = do
 -- Graph --
 -----------
 
-type Graph a = V.Vector [(Int, a)] --aは辺の情報
+type Graph a = V.Vector [(Int, a)] --a
 type UGraph = Graph ()
 
 gEmpty :: Graph a
@@ -620,7 +620,7 @@ gFromEdges n edges = ST.runST do
   VG.forM_ edges \(i, j, a) -> VM.modify v ((j, a) :) i
   V.freeze v
 
--- | 辺をすべて反転させる
+-- |
 gReverse :: Graph a -> Graph a
 gReverse g = ST.runST do
   let n = V.length g
@@ -628,36 +628,36 @@ gReverse g = ST.runST do
   V.forM_ [0 .. n - 1] \i -> M.forM_ (g ! i) \(j, a) -> VM.modify v ((i, a) :) j
   V.freeze v
 
--- | ダイクストラ法
--- | グラフと頂点をとり，それぞれの辺への最短経路を求める
--- | 辺は頂点の順序が逆になることに注意(Listのconsで要素を前にくっつけていくので)
+-- |
+-- |
+-- | (Listcons)
 dijkstra :: Graph Int -> Int -> V.Vector (Inf Int, [Int])
 dijkstra g i = V.create do
   let n = V.length g
 
-  -- 辺の距離の初期化
-  -- dists ! j == (iからの距離, 経路)
+  --
+  -- dists ! j == (i, )
   dists <- VM.replicate n (infinity, [])
   VM.write dists i (0, [i])
 
-  -- キューの初期化
-  -- キューの中身は，key: 頂点, 優先度: 距離, value: ()
+  --
+  -- key: , : , value: ()
   queue <- mpsqSingleton i 0 ()
 
-  let -- 頂点情報のアップデート処理
-      -- prev: 移動前の頂点, v: 更新対象, alt: その頂点までの(現段階での)距離
-      -- prev はすでに最短距離が確定している．
+  let --
+      -- prev: , v: , alt: ()
+      -- prev
       update prev v alt = do
         (_, xs) <- VM.read dists prev
         VM.write dists v (alt, v : xs)
-        -- アップデートした後には優先度付きキューに追加する，
-        -- 頂点をキーとしているので，同じ頂点が既にあった場合は上書きされる(典型的な C++ 実装での continue に相当)
+        --
+        -- ( C++  continue )
         mpsqInsert queue v alt ()
 
-      -- 確定した頂点を取り出したときの処理
-      -- u: 最短距離が確定した頂点
+      --
+      -- u:
       processing u = do
-        -- その頂点から出る辺をすべて取り出す
+        --
         (dist_u, _) <- VM.read dists u
         M.forM_
           (g ! u)
@@ -667,7 +667,7 @@ dijkstra g i = V.create do
             M.when (dist_v > alt) $ update u v alt
           )
 
-  -- 繰り返し処理
+  --
   while do
     res <- mpsqMinView queue
     case res of
@@ -692,7 +692,7 @@ dfs g i = ST.runST do
 ----------
 
 type Maze = V.Vector (VU.Vector Char)
--- ^ 競プロでよく出るCharの迷路
+-- ^ Char
 
 mzHeight :: Maze -> Int
 mzHeight = V.length
@@ -977,7 +977,7 @@ primeFact n
            | otherwise      = 0
   mid = floor . sqrt @Double . fromIntegral $ n
 
--- | 素数を取得
+-- |
 primes :: forall a . Integral a => a -> [a]
 primes n | n <= 1    = []
          | otherwise = filter ((frags !) . fromIntegral) [2 .. n] where
@@ -993,8 +993,8 @@ primes n | n <= 1    = []
                                \j -> VUM.write v j False
     pure v
 
--- | 拡張されたユークリッドの互除法
--- | ax + by = gcd a b を解く
+-- |
+-- | ax + by = gcd a b
 extendedEuc :: (Integral b) => b -> b -> (b, b)
 extendedEuc a b | a >= 0 && b == 0 = (1, 0)
                 | a < 0 && b == 0  = (-1, 0)
