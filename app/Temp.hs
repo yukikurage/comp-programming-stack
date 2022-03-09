@@ -110,19 +110,9 @@ yes, no :: BS.ByteString
 yes = "Yes"
 no = "No"
 
--- | 与えられた文字列より辞書順で小さが，同じ文字数の文字列の総数
-countDict :: BS -> Mod I 998244353
-countDict bs = case BS.uncons bs of
-  Just (h, t) ->
-    let x = fromIntegral $ Char.ord h - Char.ord 'A'
-    in  x * 26 ^ (BS.length bs - 1) + countDict t
-  Nothing -> 1
-
 main :: IO ()
 main = do
-  let st  = stFromV rmq ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9] :: V (Inf I))
-      st2 = stUpdate 0 5 20 st
-  print $ fst $ stFold 3 5 st2
+  pure ()
 
 -------------
 -- Library --
