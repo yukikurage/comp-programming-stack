@@ -57,3 +57,6 @@ executables:
   abc242f:
     source-dirs: problems/abc242
     main: f.hs
+  addTest:
+    source-dirs: app
+    main: AddTest.hs

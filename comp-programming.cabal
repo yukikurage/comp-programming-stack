@@ -161,9 +161,34 @@ executable abc242f
     , vector-algorithms ==0.8.0.3
   default-language: Haskell2010
 
+executable addTest
+  main-is: AddTest.hs
+  other-modules:
+      Temp
+      Paths_comp_programming
+  hs-source-dirs:
+      app
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
 executable template
   main-is: Temp.hs
   other-modules:
+      AddTest
       Paths_comp_programming
   hs-source-dirs:
       app
