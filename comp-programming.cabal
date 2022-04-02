@@ -23,127 +23,12 @@ source-repository head
   type: git
   location: https://github.com/githubuser/comp-programming
 
-executable abc242a
+executable a
   main-is: a.hs
   other-modules:
       Paths_comp_programming
   hs-source-dirs:
-      problems/abc242
-  build-depends:
-      array ==0.5.4.0
-    , base >=4.7 && <5
-    , bytestring ==0.10.10.0
-    , containers ==0.6.2.1
-    , deepseq ==1.4.4.0
-    , heaps ==0.3.6.1
-    , mtl ==2.2.2
-    , primitive ==0.7.0.1
-    , psqueues ==0.2.7.2
-    , text ==1.2.5.0
-    , unboxing-vector ==0.1.1.0
-    , unordered-containers ==0.2.10.0
-    , vector ==0.12.1.2
-    , vector-algorithms ==0.8.0.3
-  default-language: Haskell2010
-
-executable abc242b
-  main-is: b.hs
-  other-modules:
-      Paths_comp_programming
-  hs-source-dirs:
-      problems/abc242
-  build-depends:
-      array ==0.5.4.0
-    , base >=4.7 && <5
-    , bytestring ==0.10.10.0
-    , containers ==0.6.2.1
-    , deepseq ==1.4.4.0
-    , heaps ==0.3.6.1
-    , mtl ==2.2.2
-    , primitive ==0.7.0.1
-    , psqueues ==0.2.7.2
-    , text ==1.2.5.0
-    , unboxing-vector ==0.1.1.0
-    , unordered-containers ==0.2.10.0
-    , vector ==0.12.1.2
-    , vector-algorithms ==0.8.0.3
-  default-language: Haskell2010
-
-executable abc242c
-  main-is: c.hs
-  other-modules:
-      Paths_comp_programming
-  hs-source-dirs:
-      problems/abc242
-  build-depends:
-      array ==0.5.4.0
-    , base >=4.7 && <5
-    , bytestring ==0.10.10.0
-    , containers ==0.6.2.1
-    , deepseq ==1.4.4.0
-    , heaps ==0.3.6.1
-    , mtl ==2.2.2
-    , primitive ==0.7.0.1
-    , psqueues ==0.2.7.2
-    , text ==1.2.5.0
-    , unboxing-vector ==0.1.1.0
-    , unordered-containers ==0.2.10.0
-    , vector ==0.12.1.2
-    , vector-algorithms ==0.8.0.3
-  default-language: Haskell2010
-
-executable abc242d
-  main-is: d.hs
-  other-modules:
-      Paths_comp_programming
-  hs-source-dirs:
-      problems/abc242
-  build-depends:
-      array ==0.5.4.0
-    , base >=4.7 && <5
-    , bytestring ==0.10.10.0
-    , containers ==0.6.2.1
-    , deepseq ==1.4.4.0
-    , heaps ==0.3.6.1
-    , mtl ==2.2.2
-    , primitive ==0.7.0.1
-    , psqueues ==0.2.7.2
-    , text ==1.2.5.0
-    , unboxing-vector ==0.1.1.0
-    , unordered-containers ==0.2.10.0
-    , vector ==0.12.1.2
-    , vector-algorithms ==0.8.0.3
-  default-language: Haskell2010
-
-executable abc242e
-  main-is: e.hs
-  other-modules:
-      Paths_comp_programming
-  hs-source-dirs:
-      problems/abc242
-  build-depends:
-      array ==0.5.4.0
-    , base >=4.7 && <5
-    , bytestring ==0.10.10.0
-    , containers ==0.6.2.1
-    , deepseq ==1.4.4.0
-    , heaps ==0.3.6.1
-    , mtl ==2.2.2
-    , primitive ==0.7.0.1
-    , psqueues ==0.2.7.2
-    , text ==1.2.5.0
-    , unboxing-vector ==0.1.1.0
-    , unordered-containers ==0.2.10.0
-    , vector ==0.12.1.2
-    , vector-algorithms ==0.8.0.3
-  default-language: Haskell2010
-
-executable abc242f
-  main-is: f.hs
-  other-modules:
-      Paths_comp_programming
-  hs-source-dirs:
-      problems/abc242
+      problems/abc245
   build-depends:
       array ==0.5.4.0
     , base >=4.7 && <5
@@ -168,6 +53,121 @@ executable addTest
       Paths_comp_programming
   hs-source-dirs:
       app
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable b
+  main-is: b.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/abc245
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable c
+  main-is: c.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/abc245
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable d
+  main-is: d.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/abc245
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable e
+  main-is: e.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/abc245
+  build-depends:
+      array ==0.5.4.0
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , containers ==0.6.2.1
+    , deepseq ==1.4.4.0
+    , heaps ==0.3.6.1
+    , mtl ==2.2.2
+    , primitive ==0.7.0.1
+    , psqueues ==0.2.7.2
+    , text ==1.2.5.0
+    , unboxing-vector ==0.1.1.0
+    , unordered-containers ==0.2.10.0
+    , vector ==0.12.1.2
+    , vector-algorithms ==0.8.0.3
+  default-language: Haskell2010
+
+executable f
+  main-is: f.hs
+  other-modules:
+      Paths_comp_programming
+  hs-source-dirs:
+      problems/abc245
   build-depends:
       array ==0.5.4.0
     , base >=4.7 && <5

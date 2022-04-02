@@ -35,27 +35,30 @@ dependencies:
   - unordered-containers == 0.2.10.0
   - mtl == 2.2.2
 
+_exe-defs: &exe-defaults
+  source-dirs: problems/abc245
+
 executables:
   template:
     source-dirs: app
     main: Temp.hs
-  abc242a:
-    source-dirs: problems/abc242
+  a:
+    <<: *exe-defaults
     main: a.hs
-  abc242b:
-    source-dirs: problems/abc242
+  b:
+    <<: *exe-defaults
     main: b.hs
-  abc242c:
-    source-dirs: problems/abc242
+  c:
+    <<: *exe-defaults
     main: c.hs
-  abc242d:
-    source-dirs: problems/abc242
+  d:
+    <<: *exe-defaults
     main: d.hs
-  abc242e:
-    source-dirs: problems/abc242
+  e:
+    <<: *exe-defaults
     main: e.hs
-  abc242f:
-    source-dirs: problems/abc242
+  f:
+    <<: *exe-defaults
     main: f.hs
   addTest:
     source-dirs: app
